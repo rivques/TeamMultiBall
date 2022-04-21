@@ -285,9 +285,17 @@ void TeamMultiBall::OnMessageReceived(const std::string& Message, PriWrapper Sen
 			clientIsWaitingOnResize = false;
 			return;
 		}
-		// TODO: check for proximity to given coords
-		blueBallAddr = firstBall.memory_address;
-		orangeBallAddr = secondBall.memory_address;
+		float firstBallDist = distanceBetweenVectors(blueBallLoc, firstBall.GetLocation());
+		float secondBallDist = distanceBetweenVectors(blueBallLoc, secondBall.GetLocation());
+		LOG("Ball distances: 1st: {}, 2nd: {}", round(firstBallDist), round(secondBallDist));
+		if(firstBallDist < secondBallDist){
+			blueBallAddr = firstBall.memory_address;
+			orangeBallAddr = secondBall.memory_address;
+		} else {
+			blueBallAddr = secondBall.memory_address;
+			orangeBallAddr = firstBall.memory_address;
+		}
+		clientIsWaitingOnResize = false;
 	}
 }
 std::vector<std::string> TeamMultiBall::splitOnChar(std::string inString, char delimiter){
