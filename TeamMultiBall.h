@@ -29,7 +29,9 @@ class TeamMultiBall: public BakkesMod::Plugin::BakkesModPlugin, public BakkesMod
 	void createAndIdentifyBalls(bool allowRecursion);
 	uintptr_t blueBallAddr = NULL;
 	uintptr_t orangeBallAddr = NULL;
-	bool clientIsWaitingOnResize = false;
+	bool clientIsWaitingOnLocation = false;
+
+	float getDistance(Vector a, Vector b);
 
 	std::vector<std::string> splitOnChar(std::string inString, char delimiter);
 

@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "TeamMultiBall.h"
 #include "RenderingTools/RenderingTools.h"
+#include <sstream>
 
 BAKKESMOD_PLUGIN(TeamMultiBall, "write a plugin description here", plugin_version, PLUGINTYPE_FREEPLAY)
 
@@ -68,7 +69,7 @@ void TeamMultiBall::bounceBall(BallWrapper ball) {
 		ball.SetVelocity(velocity);
 	}
 }
-// JUST SEND THE BLUE BALL'S LOCATION!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 void TeamMultiBall::onTick() {
 	if (gameWrapper->IsInOnlineGame()) {
 		return; // only do this if we are host
@@ -131,9 +132,9 @@ void TeamMultiBall::createAndIdentifyBalls(bool allowRecursion) {
 	}
 	else {
 		// we are the client and need to ask the server for help if we're not already waiting
-		if (!clientIsWaitingOnResize) {
+		if (!clientIsWaitingOnLocation) {
 			Netcode->SendNewMessage("ball_loc");
-			clientIsWaitingOnResize = true;
+			clientIsWaitingOnLocation = true;
 		}
 	}
 }
@@ -144,10 +145,9 @@ void TeamMultiBall::onUnload()
 
 void TeamMultiBall::reloadPlugin()
 {
-	uintptr_t blueBallAddr = NULL;
-	uintptr_t orangeBallAddr = NULL;
-	bool clientIsWaitingOnResize = false;
-	bool hostIsWaitingOnResize = false;
+	blueBallAddr = NULL;
+	orangeBallAddr = NULL;
+	clientIsWaitingOnLocation = false;
 }
 
 bool TeamMultiBall::ballsValid() {
@@ -239,54 +239,54 @@ void TeamMultiBall::OnMessageReceived(const std::string& Message, PriWrapper Sen
 		// if we're the client
 		if (Message == "ball_failed") {
 			LOG("SERVER SAYS BALL FAILED");
-			clientIsWaitingOnResize = false;
+			clientIsWaitingOnLocation = false;
 			return;
 		}
 		std::vector<std::string> ballCoords = splitOnChar(Message, ',');
 		if(ballCoords.size() != 3){
 			LOG("Got non-conforming ({} splits) message {}", ballCoords.size(), Message);
-			clientIsWaitingOnResize = false;
+			clientIsWaitingOnLocation = false;
 			return;
 		}
+		Vector blueBallLoc{ 0, 0, 0 };
 		try{
-			Vector blueBallLoc{0, 0, 0};
 			blueBallLoc.X = std::stoi(ballCoords.at(0));
 			blueBallLoc.Y = std::stoi(ballCoords.at(1));
 			blueBallLoc.Z = std::stoi(ballCoords.at(2));
 		}
 		catch (const std::invalid_argument& ia) {
 			LOG("Invalid argument converting string to int: {}", ia.what());
-			clientIsWaitingOnResize = false;
+			clientIsWaitingOnLocation = false;
 			return;
 		}
 		// find the ball closest to the coords
 		ServerWrapper sw = gameWrapper->GetCurrentGameState();
 		if (!sw) {
 			LOG("NUlL SERVER");
-			clientIsWaitingOnResize = false;
+			clientIsWaitingOnLocation = false;
 			return;
 		}
 		ArrayWrapper<BallWrapper> balls = sw.GetGameBalls();
 		LOG("{} balls found, game expects {}", balls.Count(), sw.GetTotalGameBalls());
 		if (balls.Count() != 2) {
 			LOG("Incorrect number of balls ({})", balls.Count());
-			clientIsWaitingOnResize = false;
+			clientIsWaitingOnLocation = false;
 			return;
 		}
 		BallWrapper firstBall = balls.Get(0);
 		if (!firstBall) {
 			LOG("NULL firstBall, LENGTH 1");
-			clientIsWaitingOnResize = false;
+			clientIsWaitingOnLocation = false;
 			return;
 		}
 		BallWrapper secondBall = balls.Get(1);
 		if (!secondBall) {
 			LOG("NULL secondBall, LENGTH 1");
-			clientIsWaitingOnResize = false;
+			clientIsWaitingOnLocation = false;
 			return;
 		}
-		float firstBallDist = distanceBetweenVectors(blueBallLoc, firstBall.GetLocation());
-		float secondBallDist = distanceBetweenVectors(blueBallLoc, secondBall.GetLocation());
+		float firstBallDist = getDistance(blueBallLoc, firstBall.GetLocation());
+		float secondBallDist = getDistance(blueBallLoc, secondBall.GetLocation());
 		LOG("Ball distances: 1st: {}, 2nd: {}", round(firstBallDist), round(secondBallDist));
 		if(firstBallDist < secondBallDist){
 			blueBallAddr = firstBall.memory_address;
@@ -295,7 +295,7 @@ void TeamMultiBall::OnMessageReceived(const std::string& Message, PriWrapper Sen
 			blueBallAddr = secondBall.memory_address;
 			orangeBallAddr = firstBall.memory_address;
 		}
-		clientIsWaitingOnResize = false;
+		clientIsWaitingOnLocation = false;
 	}
 }
 std::vector<std::string> TeamMultiBall::splitOnChar(std::string inString, char delimiter){
@@ -309,7 +309,6 @@ std::vector<std::string> TeamMultiBall::splitOnChar(std::string inString, char d
 	}	
 	return seglist;
 }
-float distanceBetweenVectors(Vector a, Vector b){
-	// TODO: Copy this over from SemiHackedClient
-	return 0;
+float TeamMultiBall::getDistance(Vector a, Vector b){
+	return sqrt(std::pow(a.X - b.X, 2) + std::pow(a.Y - b.Y, 2) + std::pow(a.Z - b.Z, 2));
 }
