@@ -132,7 +132,7 @@ void TeamMultiBall::createAndIdentifyBalls(bool allowRecursion) {
 	else {
 		// we are the client and need to ask the server for help if we're not already waiting
 		if (!clientIsWaitingOnResize) {
-			Netcode->SendNewMessage("ball_req");
+			Netcode->SendNewMessage("ball_loc");
 			clientIsWaitingOnResize = true;
 		}
 	}
@@ -217,13 +217,8 @@ void TeamMultiBall::OnMessageReceived(const std::string& Message, PriWrapper Sen
 	LOG("Got Netcode message: {}", Message);
 	if (!gameWrapper->IsInOnlineGame()) {
 		// if we're the host
-		if (Message == "ball_req") {
+		if (Message == "ball_loc") {
 			LOG("Host got ball request");
-			if (hostIsWaitingOnResize) {
-				LOG("Host already waiting");
-				return; // no need to do this if we've already resized
-			}
-			// resize the blue ball a little
 			if (!ballsValid()) {
 				createAndIdentifyBalls(true);
 			}
@@ -233,76 +228,80 @@ void TeamMultiBall::OnMessageReceived(const std::string& Message, PriWrapper Sen
 				Netcode->SendNewMessage("ball_failed");
 				return;
 			}
-			blueBall.SetRadius(930);
-			LOG("Blue ball resized to {}", blueBall.GetRadius());
-			hostIsWaitingOnResize = true;
-			Netcode->SendNewMessage("ball_resized");
+			Vector ballLoc = blueBall.GetLocation();
+			Netcode->SendNewMessage(std::to_string((int)ballLoc.X) + "," + std::to_string((int)ballLoc.Y) + "," + std::to_string((int)ballLoc.Z));
+		} else {
+			LOG("Got unexpected message {}", Message);
 		}
-		if (Message == "ball_done") {
-			// resize the blue ball a little
-			if (!ballsValid()) {
-				createAndIdentifyBalls(true);
-			}
-			BallWrapper blueBall = BallWrapper(blueBallAddr);
-			if (!blueBall) {
-				LOG("REQ'd BALL DONE NULL!");
-				Netcode->SendNewMessage("ball_failed");
-				return;
-			}
-			blueBall.SetRadius(95.48718);
-			LOG("Ball done!");
-			hostIsWaitingOnResize = false;
-		}
+
 	}
 	else {
 		// if we're the client
-		if (Message == "ball_resized") {
-			// set addrs according to resized ball
-			ServerWrapper sw = gameWrapper->GetCurrentGameState();
-			if (!sw) {
-				LOG("NULL SERVER");
-				clientIsWaitingOnResize = false;
-				return;
-			}
-			ArrayWrapper<BallWrapper> balls = sw.GetGameBalls();
-			LOG("{} balls found, game expects {}", balls.Count(), sw.GetTotalGameBalls());
-			if (balls.Count() != 2) {
-				LOG("Incorrect number of balls ({})", balls.Count());
-				clientIsWaitingOnResize = false;
-				return;
-			}
-			BallWrapper firstBall = balls.Get(0);
-			if (!firstBall) {
-				LOG("NULL firstBall, LENGTH 1");
-				clientIsWaitingOnResize = false;
-				return;
-			}
-			BallWrapper secondBall = balls.Get(1);
-			if (!secondBall) {
-				LOG("NULL secondBall, LENGTH 1");
-				clientIsWaitingOnResize = false;
-				return;
-			}
-			if (firstBall.GetRadius() == 93) {
-				blueBallAddr = firstBall.memory_address;
-				orangeBallAddr = secondBall.memory_address;
-			}
-			else if (secondBall.GetRadius() == 93) {
-				blueBallAddr = secondBall.memory_address;
-				orangeBallAddr = firstBall.memory_address;
-			}
-			else {
-				LOG("NEITHER BALL 93, RADII: firstBall: {}, secondBall: {}", firstBall.GetRadius(), secondBall.GetRadius());
-			}
-			if (clientIsWaitingOnResize) {
-				Netcode->SendNewMessage("ball_done");
-				LOG("done getting ball");
-			}
-			clientIsWaitingOnResize = false;
-		}
 		if (Message == "ball_failed") {
 			LOG("SERVER SAYS BALL FAILED");
 			clientIsWaitingOnResize = false;
+			return;
 		}
+		std::vector<std::string> ballCoords = splitOnChar(Message, ',');
+		if(ballCoords.size() != 3){
+			LOG("Got non-conforming ({} splits) message {}", ballCoords.size(), Message);
+			clientIsWaitingOnResize = false;
+			return;
+		}
+		try{
+			Vector blueBallLoc{0, 0, 0};
+			blueBallLoc.X = std::stoi(ballCoords.at(0));
+			blueBallLoc.Y = std::stoi(ballCoords.at(1));
+			blueBallLoc.Z = std::stoi(ballCoords.at(2));
+		}
+		catch (const std::invalid_argument& ia) {
+			LOG("Invalid argument converting string to int: {}", ia.what());
+			clientIsWaitingOnResize = false;
+			return;
+		}
+		// find the ball closest to the coords
+		ServerWrapper sw = gameWrapper->GetCurrentGameState();
+		if (!sw) {
+			LOG("NUlL SERVER");
+			clientIsWaitingOnResize = false;
+			return;
+		}
+		ArrayWrapper<BallWrapper> balls = sw.GetGameBalls();
+		LOG("{} balls found, game expects {}", balls.Count(), sw.GetTotalGameBalls());
+		if (balls.Count() != 2) {
+			LOG("Incorrect number of balls ({})", balls.Count());
+			clientIsWaitingOnResize = false;
+			return;
+		}
+		BallWrapper firstBall = balls.Get(0);
+		if (!firstBall) {
+			LOG("NULL firstBall, LENGTH 1");
+			clientIsWaitingOnResize = false;
+			return;
+		}
+		BallWrapper secondBall = balls.Get(1);
+		if (!secondBall) {
+			LOG("NULL secondBall, LENGTH 1");
+			clientIsWaitingOnResize = false;
+			return;
+		}
+		// TODO: check for proximity to given coords
+		blueBallAddr = firstBall.memory_address;
+		orangeBallAddr = secondBall.memory_address;
 	}
+}
+std::vector<std::string> TeamMultiBall::splitOnChar(std::string inString, char delimiter){
+	std::stringstream inStream(inString);
+	std::string segment;
+	std::vector<std::string> seglist;
+
+	while(std::getline(inStream, segment, delimiter))
+	{
+	seglist.push_back(segment);
+	}	
+	return seglist;
+}
+float distanceBetweenVectors(Vector a, Vector b){
+	// TODO: Copy this over from SemiHackedClient
+	return 0;
 }

@@ -30,7 +30,8 @@ class TeamMultiBall: public BakkesMod::Plugin::BakkesModPlugin, public BakkesMod
 	uintptr_t blueBallAddr = NULL;
 	uintptr_t orangeBallAddr = NULL;
 	bool clientIsWaitingOnResize = false;
-	bool hostIsWaitingOnResize = false;
+
+	std::vector<std::string> splitOnChar(std::string inString, char delimiter);
 
 	void RenderSettings() override;
 	std::string GetPluginName() override;
